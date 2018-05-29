@@ -100,6 +100,8 @@
     <string name="message_status_delivered">Delivered %s</string>
     <string name="message_status_failed">Failed to send. Tap to try again</string>
 
+    <string name="copy_status_failed">Failed to copy text</string>
+
     <string name="info_title">Details</string>
     <string name="info_notifications">Notifications</string>
     <string name="info_theme">Theme</string>
@@ -208,6 +210,7 @@
 
     <string name="notification_reply">Reply</string>
     <string name="notification_read">Mark read</string>
+    <string name="notification_copy">Copy \"%s\"</string>
 
     <string name="button_cancel">Cancel</string>
     <string name="button_delete">Delete</string>

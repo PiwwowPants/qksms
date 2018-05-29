@@ -36,12 +36,16 @@ import com.moez.QKSMS.R
 import common.util.extensions.dpToPx
 import feature.compose.ComposeActivity
 import feature.qkreply.QkReplyActivity
+import io.realm.RealmResults
+import model.Message
+import receiver.CopyToClipboardReceiver
 import receiver.MarkReadReceiver
 import receiver.MarkSeenReceiver
 import receiver.RemoteMessagingReceiver
 import repository.MessageRepository
 import util.Preferences
 import util.tryOrNull
+import java.util.regex.Pattern
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -104,10 +108,6 @@ class NotificationManagerImpl @Inject constructor(
         val seenIntent = Intent(context, MarkSeenReceiver::class.java).putExtra("threadId", threadId)
         val seenPI = PendingIntent.getBroadcast(context, threadId.toInt() + 20000, seenIntent, PendingIntent.FLAG_UPDATE_CURRENT)
 
-        val readIntent = Intent(context, MarkReadReceiver::class.java).putExtra("threadId", threadId)
-        val readPI = PendingIntent.getBroadcast(context, threadId.toInt() + 30000, readIntent, PendingIntent.FLAG_UPDATE_CURRENT)
-        val readAction = NotificationCompat.Action(R.drawable.ic_check_white_24dp, context.getString(R.string.notification_read), readPI)
-
         val notification = NotificationCompat.Builder(context, getChannelIdForNotification(threadId))
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setColor(colors.themeForConversation(threadId).blockingFirst())
@@ -117,7 +117,7 @@ class NotificationManagerImpl @Inject constructor(
                 .setAutoCancel(true)
                 .setContentIntent(contentPI)
                 .setDeleteIntent(seenPI)
-                .addAction(readAction)
+                .addAction(getSecondaryAction(messages, threadId))
                 .setSound(Uri.parse(prefs.ringtone(threadId).get()))
                 .setLights(Color.WHITE, 500, 2000)
                 .setVibrate(if (prefs.vibration(threadId).get()) VIBRATE_PATTERN else longArrayOf(0))
@@ -236,6 +236,42 @@ class NotificationManagerImpl @Inject constructor(
                 context.getString(R.string.notification_reply), replyPI)
                 .addRemoteInput(remoteInput)
                 .build()
+    }
+
+    private fun getSecondaryAction(messages: RealmResults<Message>, threadId: Long): NotificationCompat.Action {
+        val code = if (messages.size == 1) extract2faCode(messages[0]) else null
+        return if (code != null) {
+            val copyIntent = Intent(context, CopyToClipboardReceiver::class.java).putExtra(Intent.EXTRA_TEXT, code)
+            val copyPI = PendingIntent.getBroadcast(context, threadId.toInt() + 40000, copyIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+            NotificationCompat.Action(R.drawable.ic_content_copy_white_24dp, context.resources.getString(R.string.notification_copy, code), copyPI)
+        } else {
+            val readIntent = Intent(context, MarkReadReceiver::class.java).putExtra("threadId", threadId)
+            val readPI = PendingIntent.getBroadcast(context, threadId.toInt() + 30000, readIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+            NotificationCompat.Action(R.drawable.ic_check_white_24dp, context.getString(R.string.notification_read), readPI)
+        }
+    }
+
+    private fun extract2faCode(message: Message?): String? {
+        return if (message != null) {
+            val messageString = message.getText()
+            if (messageString.contains("code", true)) {
+                val matcher = Pattern.compile("\\d{3,10}").matcher(messageString)
+                if (matcher.find()) {
+                    val code = matcher.group(0)
+                    return if (messageString.replace(code, "").contains(Regex("\\d"))) {
+                        null
+                    } else {
+                        code
+                    }
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } else {
+            null
+        }
     }
 
     /**
